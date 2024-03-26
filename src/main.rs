@@ -1,9 +1,12 @@
 use reqwest::Error;
 use serde::Deserialize;
 
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
+
+use chrono::prelude::*;
+use colored::Colorize;
 
 #[derive(Deserialize, Debug)]
 struct ApiResponse {
@@ -37,21 +40,23 @@ where
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let data = read_lines("channels.txt").unwrap();
-    // if args.len() < 4 {
-    //     eprintln!("Usage: {} <identifier> <api_key> <useId>", args[0]);
-    //     std::process::exit(1);
-    // }
+    let mut save_to_txt = false;
+    if args.len() < 2 {
+        println!("{} - Please provide a boolean value to save to txt file (assumed false)", "warn".yellow());
+    }else if args[1].eq("true"){
+        save_to_txt = true;
+    }
     let use_id = data[2].eq("true");
     // Adjusted indices for channel_id and api_key
-    fetch_channel_data(&data[0], &data[1], use_id).await?;
+    fetch_channel_data(&data[0], &data[1], use_id, save_to_txt).await?;
 
     Ok(())
 }
 
-async fn fetch_channel_data(identifier: &str, api_key: &str, use_id: bool) -> Result<(), Error> {
+async fn fetch_channel_data(identifier: &str, api_key: &str, use_id: bool, save_to_txt: bool) -> Result<(), Box<dyn std::error::Error>> {
     
     let (query_param, identifier_value) = if !use_id {
         ("forUsername", identifier)
@@ -76,6 +81,20 @@ async fn fetch_channel_data(identifier: &str, api_key: &str, use_id: bool) -> Re
         println!("View count: {}", view_count);
         println!("Subscriber count: {}", subscriber_count);
         println!("Video count: {}", video_count);
+        if save_to_txt {
+            let dt = chrono::offset::Local::now();
+            let date = dt.format("%Y-%m-%d %H:%M:%S").to_string();
+
+            let existing_data = std::fs::read_to_string("channel_data.txt")?;
+
+            let new_content = format!("\n[{date}]\nView count: {}\nSubscriber count: {}\nVideo count: {}\n\n{}", view_count, subscriber_count, video_count, existing_data);
+
+            let mut file = OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open("channel_data.txt")?;
+            file.write_all(new_content.as_bytes())?;
+        }
     } else {
         eprintln!("No channel found");
     }
