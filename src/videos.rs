@@ -35,9 +35,19 @@ struct VideoStatistics {
 #[derive(Deserialize)]
 struct VideoSnippet {
     publishedAt: String,
+    title: String,
+}
+#[derive(Clone)]
+pub struct VideoData {
+    pub id: String,
+    pub view_count: u64,
+    pub published_at: String,
+    pub title: String,
 }
 
-pub async fn fetch_video_data(identifier: &str, api_key: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+type video_data_list = (VideoData, VideoData);
+
+pub async fn fetch_video_data(identifier: &str, api_key: &str) ->  Result<video_data_list, Box<dyn std::error::Error>> {
     let search_url = format!(
         "https://www.googleapis.com/youtube/v3/search?key={}&channelId={}&part=snippet,id&order=date&maxResults=20",
         api_key, identifier
@@ -58,25 +68,33 @@ pub async fn fetch_video_data(identifier: &str, api_key: &str) -> Result<(String
 
     let video_list_res = client.get(&video_details_url).send().await?.json::<VideoListResponse>().await?;
 
-    let (most_viewed, latest) = video_list_res.items.into_iter()
-        .fold((None, None), |(max_view, latest), item| {
-            let view_count = item.statistics.viewCount.parse::<u64>().unwrap_or(0);
-            let max_view = match max_view {
-                Some((id, max_views)) if view_count > max_views => Some((item.id.clone(), view_count)),
-                None => Some((item.id.clone(), view_count)),
-                _ => max_view,
-            };
-            let latest = match latest {
-                Some((id, date)) if item.snippet.publishedAt > date => Some((item.id, item.snippet.publishedAt)),
-                None => Some((item.id, item.snippet.publishedAt)),
-                _ => latest,
-            };
-            (max_view, latest)
-        });
+    // Initialize variables to store information about the most viewed and latest videos
+    let mut most_viewed: Option<VideoData> = None;
+    let mut latest: Option<VideoData> = None;
 
-    // Extracting the video IDs from the tuples
-    let most_viewed_video_id = most_viewed.map(|(id, _)| id).unwrap_or_default();
-    let latest_video_id = latest.map(|(id, _)| id).unwrap_or_default();
+    for item in video_list_res.items {
+        let view_count_curr = item.statistics.viewCount.parse::<u64>().unwrap_or(0);
+        let video_detail = VideoData {
+            id: item.id.clone(),
+            title: item.snippet.title.clone(),
+            published_at: item.snippet.publishedAt.clone(),
+            view_count: view_count_curr,
+        };
 
-    Ok((most_viewed_video_id, latest_video_id))
+        // Determine if current video is the most viewed
+        if most_viewed.as_ref().map_or(true, |v: &VideoData| view_count_curr > v.view_count) {
+            most_viewed = Some(video_detail.clone());
+        }
+
+        // Determine if current video is the latest published
+        if latest.as_ref().map_or(true, |v: &VideoData| item.snippet.publishedAt > v.published_at) {
+            latest = Some(video_detail);
+        }
+    }
+
+    if let (Some(latest_video), Some(most_viewed_video)) = (latest, most_viewed) {
+        Ok((latest_video, most_viewed_video.clone()))
+    } else {
+        Err("No videos found".into())
+    }
 }
