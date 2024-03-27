@@ -70,7 +70,7 @@ async fn fetch_channel_data(identifier: &str, api_key: &str, use_id: bool, save_
         query_param, identifier_value, api_key
     );
 
-    videos::fetch_video_data(identifier, api_key).await?;
+    
 
     let client = reqwest::Client::new();
     let res = client.get(&url).send().await?.json::<ApiResponse>().await?;
@@ -83,6 +83,10 @@ async fn fetch_channel_data(identifier: &str, api_key: &str, use_id: bool, save_
         println!("View count: {}", view_count);
         println!("Subscriber count: {}", subscriber_count);
         println!("Video count: {}", video_count);
+
+        let (most_viewed_video, latest_video) = videos::fetch_video_data(identifier, api_key).await?;
+        println!("Most Viewed Video ID: {}", most_viewed_video);
+        println!("Latest Video ID: {}", latest_video);
         if save_to_txt {
             let dt = chrono::offset::Local::now();
             let date = dt.format("%Y-%m-%d %H:%M:%S").to_string();
