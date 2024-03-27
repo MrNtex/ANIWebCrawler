@@ -1,12 +1,13 @@
-use reqwest::Error;
+
 use serde::Deserialize;
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 
-use chrono::prelude::*;
 use colored::Colorize;
+
+mod videos;
 
 #[derive(Deserialize, Debug)]
 struct ApiResponse {
@@ -69,6 +70,7 @@ async fn fetch_channel_data(identifier: &str, api_key: &str, use_id: bool, save_
         query_param, identifier_value, api_key
     );
 
+    videos::fetch_video_data(identifier, api_key).await?;
 
     let client = reqwest::Client::new();
     let res = client.get(&url).send().await?.json::<ApiResponse>().await?;
